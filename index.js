@@ -2,32 +2,38 @@ const express = require('express')
 const cors = require('cors')
 const app = express()
 
-const PORT = process.env.PORT || 3000
-const clients = []
-
 app.use(cors())
 app.use(express.json())
 
-app.get('/mcp', (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream')
-  res.setHeader('Cache-Control', 'no-cache')
-  res.setHeader('Connection', 'keep-alive')
+// MCP Route: Receives commands
+app.post('/mcp', (req, res) => {
+  console.log('🔧 Received MCP message:', req.body)
+  res.json({ status: 'received', echo: req.body })
+})
 
-  const client = { id: Date.now(), res }
-  clients.push(client)
+// SSE Stream: Keeps connection open
+app.get('/mcp/stream', (req, res) => {
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive'
+  })
+  res.flushHeaders()
+
+  // Send a ping every 15s to keep it alive
+  const ping = setInterval(() => {
+    res.write(':\n\n') // SSE comment/ping
+  }, 15000)
+
+  res.write(`event: init\ndata: Connected to MCP stream\n\n`)
 
   req.on('close', () => {
-    const i = clients.findIndex(c => c.id === client.id)
-    if (i !== -1) clients.splice(i, 1)
+    clearInterval(ping)
   })
 })
 
-app.post('/mcp/control', (req, res) => {
-  const data = req.body
-  for (const client of clients) {
-    client.res.write(`event: control\ndata: ${JSON.stringify(data)}\n\n`)
-  }
-  res.json({ ok: true })
+// Bind to correct port for Render
+const PORT = process.env.PORT || 3000
+app.listen(PORT, () => {
+  console.log(`✅ MCP Server running on port ${PORT}`)
 })
-
-app.listen(PORT, () => console.log(`MCP running on port ${PORT}`))
